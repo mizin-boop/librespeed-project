@@ -1,0 +1,7 @@
+MYSQL_DATABASE=librespeed
+MYSQL_USER=librespeed
+MYSQL_PASSWORD=librespeed
+MYSQL_ROOT_PASSWORD=root-password
+STATS_PASSWORD=stats-password
+OBFUSCATION_SALT=0x1234abcd
+GDPR_EMAIL=admin@example.com

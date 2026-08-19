@@ -1,10 +1,3 @@
-results/idObfuscation_salt.php
-backend/getIP_serverLocation.php
-db-dir/
-.vscode/
-node_modules/
-playwright-report/
-test-results/
-results/speedtest_telemetry.db
-results/speedtest_telemetry.db-shm
-results/speedtest_telemetry.db-wal
+.env
+*.log
+.DS_Store

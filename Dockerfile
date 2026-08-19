@@ -1,68 +1,27 @@
-FROM php:8-apache
+FROM php:8.3-fpm-bookworm
 
-# use docker-php-extension-installer for automatically get the right packages installed
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+ARG LIBRESPEED_VERSION=v6.2.0
 
-# Install extensions and cleanup in a single layer to reduce image size
-RUN install-php-extensions iconv gd pdo pdo_mysql pdo_pgsql pgsql \
-    && rm -f /usr/src/php.tar.xz /usr/src/php.tar.xz.asc \
-    && apt-get autoremove -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl libfreetype6-dev libjpeg62-turbo-dev libpng-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" pdo pdo_mysql gd \
+    && curl -fsSL "https://github.com/librespeed/speedtest/archive/refs/tags/${LIBRESPEED_VERSION}.tar.gz" -o /tmp/librespeed.tar.gz \
+    && mkdir -p /opt/librespeed \
+    && tar -xzf /tmp/librespeed.tar.gz --strip-components=1 -C /opt/librespeed \
+    && rm -rf /var/lib/apt/lists/* /tmp/librespeed.tar.gz
 
-COPY docker/librespeed-php.ini ${PHP_INI_DIR}/conf.d/99-librespeed.ini
+COPY app/entrypoint.sh /usr/local/bin/librespeed-entrypoint.sh
+RUN chmod +x /usr/local/bin/librespeed-entrypoint.sh \
+    && { \
+         echo '[www]'; \
+         echo 'catch_workers_output = yes'; \
+         echo 'decorate_workers_output = no'; \
+         echo 'access.log = /proc/self/fd/2'; \
+         echo 'clear_env = no'; \
+       } > /usr/local/etc/php-fpm.d/zz-librespeed.conf
 
-# Prepare files and folders
-RUN mkdir -p /speedtest/
-
-# Copy sources
-COPY backend/ /speedtest/backend
-COPY frontend/ /speedtest/frontend
-
-COPY results/*.php /speedtest/results/
-COPY results/*.ttf /speedtest/results/
-
-COPY *.js /speedtest/
-COPY index.html /speedtest/
-COPY index-classic.html /speedtest/
-COPY index-modern.html /speedtest/
-COPY config.json /speedtest/
-COPY settings.json /speedtest/
-COPY server-list.json /speedtest/
-COPY stability.html /speedtest/
-COPY favicon.ico /speedtest/
-COPY manifest.webmanifest /speedtest/
-COPY images/ /speedtest/images/
-
-COPY docker/entrypoint.sh /
-
-# Prepare default environment variables
-ENV TITLE=LibreSpeed
-ENV TAGLINE="No Flash, No Java, No Websockets, No Bullsh*t"
-ENV MODE=standalone
-ENV PASSWORD=password
-ENV TELEMETRY=false
-ENV ENABLE_ID_OBFUSCATION=false
-ENV REDACT_IP_ADDRESSES=false
-ENV WEBPORT=8080
-ENV USE_NEW_DESIGN=false
-
-# https://httpd.apache.org/docs/2.4/stopping.html#gracefulstop
-STOPSIGNAL SIGWINCH
-
-# Add labels for better metadata
-LABEL org.opencontainers.image.title="LibreSpeed"
-LABEL org.opencontainers.image.description="A Free and Open Source speed test that you can host on your server(s)"
-LABEL org.opencontainers.image.vendor="LibreSpeed"
-LABEL org.opencontainers.image.url="https://github.com/librespeed/speedtest"
-LABEL org.opencontainers.image.source="https://github.com/librespeed/speedtest"
-LABEL org.opencontainers.image.documentation="https://github.com/librespeed/speedtest/blob/master/doc_docker.md"
-LABEL org.opencontainers.image.licenses="LGPL-3.0-or-later"
-
-# Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${WEBPORT}/ || exit 1
-
-# Final touches
-EXPOSE ${WEBPORT}
-CMD ["bash", "/entrypoint.sh"]
+WORKDIR /var/www/html
+EXPOSE 9000
+ENTRYPOINT ["/usr/local/bin/librespeed-entrypoint.sh"]
+CMD ["php-fpm", "-F"]
